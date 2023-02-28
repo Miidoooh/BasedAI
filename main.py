@@ -1,59 +1,48 @@
-import telegram.ext as tg
-from telegram import ParseMode, Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import (
-    CallbackContext,
-    CommandHandler,
-    Filters,
-    MessageHandler,
-)
-from config import BOT_TOKEN
-from telegram.utils.helpers import mention_html
-import re
+import telegram
+import openai
 
-updater = tg.Updater(BOT_TOKEN, workers=32, use_context=True)
+# Set up Telegram bot
+bot = telegram.Bot(token='YOUR_TELEGRAM_API_TOKEN')
+
+# Set up OpenAI API
+openai.api_key = 'YOUR_OPENAI_API_KEY'
+
+# Handle incoming messages from Telegram
+def handle_message(update, context):
+    # Get the user's message
+    user_message = update.message.text
+
+    # Check if the message is a command
+    if user_message.startswith('/'):
+        # Handle the command
+        if user_message.startswith('/based'):
+            # Get the user's message without the command
+            user_message = user_message.replace('/based', '', 1).strip()
+
+            # Send the user's message to the ChatGPT API
+            response = openai.Completion.create(
+                engine='davinci',
+                prompt=user_message,
+                max_tokens=1024,
+                temperature=0.7,
+            )
+
+            # Get the AI-generated text from the response
+            ai_message = response.choices[0].text
+
+            # Send the AI-generated text back to the user
+            context.bot.send_message(chat_id=update.effective_chat.id, text=ai_message)
+        else:
+            # Unknown command
+            context.bot.send_message(chat_id=update.effective_chat.id, text="Unknown command. Please use /based to talk to the AI.")
+    else:
+        # Unknown message
+        context.bot.send_message(chat_id=update.effective_chat.id, text="Please use /based to talk to the AI.")
+
+# Set up webhook to receive updates from Telegram
+updater = telegram.ext.Updater(token='YOUR_TELEGRAM_API_TOKEN', use_context=True)
 dispatcher = updater.dispatcher
+dispatcher.add_handler(telegram.ext.MessageHandler(telegram.ext.Filters.text, handle_message))
 
-
-def start(update: Update, context: CallbackContext):
-    chat = update.effective_chat
-    msg = update.effective_message
-    keyb = []
-    keyb.append([InlineKeyboardButton(text="(★) Add me to your chat (★)", url=f"http://t.me/{context.bot.username}?startgroup=true")])
-    msg.reply_text(f"ʜᴇʏᴀ\nɪ'ᴍ ᴀɴᴛɪᴄʜᴀᴛᴜꜱᴇʀɴᴀᴍᴇʙᴏᴛ\nɪ ᴄᴀɴ ʀᴇꜱᴛʀɪᴄᴛ ᴡʜɪᴄʜ ᴄᴏɴᴛᴀɪɴꜱ ᴘᴜʙʟɪᴄ ᴄʜᴀᴛ ᴜꜱᴇʀɴᴀᴍᴇ ᴍᴇꜱꜱᴀɢᴇꜱ", reply_markup=InlineKeyboardMarkup(keyb))
-
-def clean_blue_text_must_click(update: Update, context: CallbackContext):
-    bot = context.bot
-    chat = update.effective_chat
-    message = update.effective_message
-    users = update.effective_user
-    links = re.findall(r'@[^\s]+', message.text)
-    if not links:
-        return
-    chat_admins = dispatcher.bot.getChatAdministrators(chat.id)
-    admin_list = [x.user.id for x in chat_admins]
-    if users.id in admin_list:
-       return
-    if chat.get_member(bot.id).can_delete_messages:
-       if message.text:
-          for link in links:
-             try:
-                 user = bot.get_chat(link)
-                 print(user.id)
-                 if len(str(user.id)) > 12:
-                    message.reply_text(f"{users.first_name}, your message was hidden, chat usernames not allowed in this group.")
-                    message.delete()
-             except:
-                 return
-
-
-USER = 110
-START = CommandHandler(["start", "ping"], start)
-CLEAN_BLUE_TEXT_HANDLER = MessageHandler(
-    Filters.all & Filters.chat_type.groups,
-    clean_blue_text_must_click,
-    run_async=True,
-)
-dispatcher.add_handler(CLEAN_BLUE_TEXT_HANDLER, USER)
-dispatcher.add_handler(START)
-
+# Start the Telegram bot
 updater.start_polling(timeout=15, read_latency=4, drop_pending_updates=True)
